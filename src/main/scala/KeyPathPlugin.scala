@@ -1,7 +1,9 @@
+package com.hanhuy.sbt.keypath
 import sbt._
 import sbt.Keys._
 import sbt.complete._
 import DefaultParsers._
+import language.existentials
 /**
  * @author pfnguyen
  */
@@ -21,11 +23,11 @@ object KeyPathPlugin extends AutoPlugin {
       import extracted._
       val basedir = new File(Project.session(st).current.build)
       val graph = Project.settingGraph(structure, basedir, start)
-      st.log.info(s"Path: ${graph.name}")
-      st.log.info(s"Looking for: ${showKey(start)} <- ${showKey(end)}")
-      val result = dfs(graph, end, st)
+      st.log.info(s"Searching for: ${showKey(start)} <- ${showKey(end)}")
+      val result = SearchGraph(graph, end, st).traverse
+      println()
       if (result.isEmpty) {
-        st.log.error("No paths found")
+        st.log.error(s"${showKey(start)} does not depend on ${showKey(end)}")
       } else {
         val s = result.map { r =>
           r.mkString("\n  +-- ")
@@ -35,12 +37,21 @@ object KeyPathPlugin extends AutoPlugin {
       st
   }
 
-  def dfs(graph: SettingGraph,
+
+  val pathCommand = Command("keypath",
+    ("keypath", "inspect dependency paths between 2 keys"),
+    "Specify 2 keys, first, the key which depends on the other key, second, the key that you want the path to")(pathParser)(pathAction)
+}
+
+case class SearchGraph(graph: SettingGraph, end: ScopedKey[_], st: State)(implicit display: Show[ScopedKey[_]]) {
+  def traverse = dfs(graph, end, st)
+  private[this] var visited = Set.empty[String]
+  private[this] var expanded = Map.empty[String,SettingGraph]
+  private[this] def dfs(graph: SettingGraph,
           end: ScopedKey[_],
           st: State,
-          visited: Set[String] = Set.empty,
           path: List[String] = Nil,
-          paths: List[List[String]] = Nil)(implicit display: Show[ScopedKey[_]]): List[List[String]] = {
+          paths: List[List[String]] = Nil): List[List[String]] = {
     import language.postfixOps
     val key = graph.definedIn.getOrElse(graph.name)
     if (visited(key)) {
@@ -48,23 +59,24 @@ object KeyPathPlugin extends AutoPlugin {
     } else if (key == display(end)) {
       (key :: path).reverse :: paths
     } else {
-      val visited2 = visited + key
+      visited = visited + key
       val graph2 = if (graph.depends.isEmpty) {
-        val basedir = new File(Project.session(st).current.build)
-        Parser(Act.requireSession(st,
-          Act.scopedKeyParser(Project.extract(st))))(key).resultEmpty.toEither.fold(
-            _ => graph,
-            Project.settingGraph(Project.extract(st).structure, basedir, _))
+        val g2 = expanded.getOrElse(key, {
+          val basedir = new File(Project.session(st).current.build)
+          print(".")
+          Parser(Act.requireSession(st,
+            Act.scopedKeyParser(Project.extract(st))))(key).resultEmpty.toEither.fold(
+              _ => graph,
+              Project.settingGraph(Project.extract(st).structure, basedir, _))
+        })
+        expanded = expanded + ((key,g2))
+        g2
       } else graph
       graph2.depends flatMap { d =>
-        if (!visited2(d.definedIn.getOrElse(d.name)))
-          dfs(d, end, st, visited2, key :: path, paths)
+        if (!visited(d.definedIn.getOrElse(d.name)))
+          dfs(d, end, st, key :: path, paths)
         else Nil
       } toList
     }
   }
-
-  val pathCommand = Command("keypath",
-    ("keypath", "inspect dependency paths between 2 keys"),
-    "Specify 2 keys, first, the key which depends on the other key, second, the key that you want the path to")(pathParser)(pathAction)
 }

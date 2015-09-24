@@ -4,7 +4,7 @@ name := "key-path"
 
 organization := "com.hanhuy.sbt"
 
-version := "0.1"
+version := "0.2"
 
 scalacOptions ++= Seq("-deprecation","-Xlint","-feature")
 
