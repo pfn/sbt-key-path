@@ -44,14 +44,15 @@ object KeyPathPlugin extends AutoPlugin {
 }
 
 case class SearchGraph(graph: SettingGraph, end: ScopedKey[_], st: State)(implicit display: Show[ScopedKey[_]]) {
-  def traverse = dfs(graph, end, st)
+  def traverse = dfs(graph, end, st, dependencies = Project.extract(st).get(buildDependencies))
   private[this] var visited = Set.empty[String]
   private[this] var expanded = Map.empty[String,SettingGraph]
   private[this] def dfs(graph: SettingGraph,
-          end: ScopedKey[_],
-          st: State,
-          path: List[String] = Nil,
-          paths: List[List[String]] = Nil): List[List[String]] = {
+                        end: ScopedKey[_],
+                        st: State,
+                        dependencies: BuildDependencies,
+                        path: List[String] = Nil,
+                        paths: List[List[String]] = Nil): List[List[String]] = {
     import language.postfixOps
     val key = graph.definedIn.getOrElse(graph.name)
     if (visited(key)) {
@@ -60,21 +61,37 @@ case class SearchGraph(graph: SettingGraph, end: ScopedKey[_], st: State)(implic
       (key :: path).reverse :: paths
     } else {
       visited = visited + key
-      val graph2 = if (graph.depends.isEmpty) {
+      val graph2 = if (key endsWith ":internalDependencyClasspath") {
+        val basedir = new File(Project.session(st).current.build)
+        val extracted = Project.extract(st)
+        Parser(Act.requireSession(st,
+          Act.scopedKeyParser(extracted)))(key).resultEmpty.toEither.fold(
+          _ => graph, k => {
+            val prj = k.scope.project.toOption.get.asInstanceOf[ProjectRef]
+            val cfg = k.scope.config.toOption
+            val deps = dependencies.classpath(prj)
+            val gs = deps map { d =>
+              val id = d.project.project
+              val exported = s"$id/${cfg.fold("compile")(_.name)}:exportedProducts"
+              SettingGraph(exported, Option(exported), None, None, basedir, Set.empty)
+            }
+            graph.copy(depends = graph.depends ++ gs)
+          })
+      } else if (graph.depends.isEmpty) {
         val g2 = expanded.getOrElse(key, {
           val basedir = new File(Project.session(st).current.build)
           print(".")
           Parser(Act.requireSession(st,
             Act.scopedKeyParser(Project.extract(st))))(key).resultEmpty.toEither.fold(
-              _ => graph,
-              Project.settingGraph(Project.extract(st).structure, basedir, _))
+            _ => graph,
+            Project.settingGraph(Project.extract(st).structure, basedir, _))
         })
         expanded = expanded + ((key,g2))
         g2
       } else graph
       graph2.depends flatMap { d =>
         if (!visited(d.definedIn.getOrElse(d.name)))
-          dfs(d, end, st, key :: path, paths)
+          dfs(d, end, st, dependencies, key :: path, paths)
         else Nil
       } toList
     }

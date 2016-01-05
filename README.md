@@ -2,11 +2,11 @@
 
 Inspect full dependency paths between settings and tasks.
 
-Current version is 0.2
+Current version is 0.3
 
 ### Usage ###
 
-* Add the plugin (globally or per project): `addSbtPlugin("com.hanhuy.sbt" % "key-path" % "0.2")`
+* Add the plugin (globally or per project): `addSbtPlugin("com.hanhuy.sbt" % "key-path" % "0.3")`
 * Use the new command `keypath`
   * `keypath <target-key> <dependency-key>`
 

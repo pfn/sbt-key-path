@@ -4,7 +4,7 @@ name := "key-path"
 
 organization := "com.hanhuy.sbt"
 
-version := "0.2"
+version := "0.3"
 
 scalacOptions ++= Seq("-deprecation","-Xlint","-feature")
 
@@ -22,8 +22,8 @@ licenses += ("MIT", url("http://opensource.org/licenses/MIT"))
 bintrayOrganization in bintray := None
 
 // scripted
-scriptedSettings
+//scriptedSettings
 
-scriptedLaunchOpts ++= "-Xmx1024m" ::
-  "-Dplugin.version=" + version.value ::
-  Nil
+//scriptedLaunchOpts ++= "-Xmx1024m" ::
+//  "-Dplugin.version=" + version.value ::
+//  Nil
